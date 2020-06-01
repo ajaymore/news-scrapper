@@ -1,20 +1,53 @@
+require('dotenv').config();
 const puppeteer = require('puppeteer');
-const chalk = require('chalk');
 const admin = require('firebase-admin');
 const { format } = require('date-fns');
+const nodemailer = require('nodemailer');
+const path = require('path');
+const fs = require('fs');
 const serviceAccount = require('./serviceAccount.json');
+const token = require('./token.json');
+const credentials = require('./credentials.json');
+
+fs.unlinkSync(path.resolve(__dirname, 'log.txt'));
+const logger = fs.createWriteStream('log.txt', {
+  flags: 'a', // 'a' means appending (old data will be preserved)
+});
+
+const EMAIL_USERNAME = 'mail@ajaymore.in';
+const COMMON_NAME = 'Ajay More';
+
+const nodemailerSettings = {
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
+  from: `"${COMMON_NAME}" <${EMAIL_USERNAME}>`,
+  auth: {
+    type: 'OAuth2',
+    user: EMAIL_USERNAME,
+    clientId: credentials.installed.client_id,
+    clientSecret: credentials.installed.client_secret,
+    refreshToken: token.refresh_token,
+    accessToken: token.access_token,
+    expires: token.expiry_date,
+  },
+};
+
+const gmailTransport = nodemailer.createTransport(nodemailerSettings);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  databaseURL: 'https://utilities-38d5b.firebaseio.com',
+  databaseURL: process.env.DATABASE_URL,
 });
 
-// MY OCD of colorful console.logs for debugging... IT HELPS
-const error = chalk.bold.red;
-const success = chalk.keyword('green');
 const today = format(new Date(), 'dd-MM-yyyy');
 
 const dbRef = admin.firestore().collection('news-feed').doc(today);
+
+const log = (message) =>
+  logger.write(
+    `${format(new Date(), 'dd-MM-yyyy hh:mm:ss aa')} : ${message} \n`
+  );
 
 async function getHackerNews() {
   const browser = await puppeteer.launch({
@@ -22,49 +55,42 @@ async function getHackerNews() {
   });
   try {
     const page = await browser.newPage();
+    await page.setDefaultNavigationTimeout(60000);
 
-    console.log(success('HackerNews Fetch Started!'));
+    log('HackerNews Fetch Started!');
     await page.goto(`https://news.ycombinator.com/`);
-    await page.waitForSelector('a.storylink');
+    await page.waitForSelector('tr.athing');
     const hackerNews = await page.evaluate(() => {
-      const titleNodeList = document.querySelectorAll(`a.storylink`);
-      const ageList = document.querySelectorAll(`span.age`);
-      const scoreList = document.querySelectorAll(`span.score`);
+      const nodes = document.querySelectorAll('tr.athing');
       const titleLinkArray = [];
-      for (let i = 0; i < titleNodeList.length; i += 1) {
-        const link = titleNodeList[i].getAttribute('href');
-        titleLinkArray[i] = {
-          title: titleNodeList[i].innerText.trim(),
+      nodes.forEach((node) => {
+        const link = node.querySelector('a.storylink').getAttribute('href');
+        titleLinkArray.push({
+          title: node.querySelector('a.storylink').innerText,
           link: link.includes('http')
             ? link
             : `https://news.ycombinator.com/${link}`,
-          age: ageList[i].innerText.trim(),
-          score: scoreList[i].innerText.trim(),
-        };
-      }
+          age: node.nextElementSibling.querySelector('.age a')
+            ? node.nextElementSibling.querySelector('.age a').innerText
+            : '',
+          score: node.nextElementSibling.querySelector('.score')
+            ? node.nextElementSibling.querySelector('.score').innerText
+            : '',
+        });
+      });
       return titleLinkArray;
     });
-    console.log(success('HackerNews Fetch Complete!'));
+    log('HackerNews Fetch Complete!');
     return dbRef.set(
       {
         hackerNews,
       },
       { merge: true }
     );
-
-    // await fs.writeFile(
-    //   'hackernews.json',
-    //   JSON.stringify(hackerNews),
-    //   async (err) => {
-    //     if (err) console.log(error(err));
-    //     await browser.close();
-    //     console.log(success('HackerNews Fetch Complete!'));
-    //   }
-    // );
   } catch (err) {
-    if (err) console.log(error(err));
+    if (err) log(err);
     await browser.close();
-    console.log(error('Browser Closed'));
+    log('Browser Closed');
     return null;
   }
 }
@@ -75,8 +101,9 @@ async function getLoksattaNews() {
   });
   try {
     const page = await browser.newPage();
+    await page.setDefaultNavigationTimeout(60000);
 
-    console.log(success('Loksatta Fetch Started!'));
+    log('Loksatta Fetch Started!');
     await page.goto(`https://www.loksatta.com/sampadkiya/`);
     await page.waitForSelector('div.topnews.topn2');
     let loksattaNews = await page.evaluate(() => {
@@ -111,8 +138,9 @@ async function getLoksattaNews() {
     const promises = loksattaNews.map(async (item) => {
       try {
         const page2 = await browser.newPage();
+        await page2.setDefaultNavigationTimeout(60000);
         await page2.goto(item.link);
-        console.log(success('Fetching', item.link));
+        log(`Fetching ${item.link}`);
         await page2.waitForSelector('.txtsection');
         const { author, content } = await page2.evaluate(() => {
           return {
@@ -128,13 +156,13 @@ async function getLoksattaNews() {
           content,
         };
       } catch (err) {
-        console.log(err);
+        log(err);
         return { ...item, content: '', author: '' };
       }
     });
 
     loksattaNews = await Promise.all(promises);
-    console.log(success('Loksatta Fetch Complete!'));
+    log('Loksatta Fetch Complete!');
     return dbRef.set(
       {
         loksattaNews,
@@ -142,9 +170,9 @@ async function getLoksattaNews() {
       { merge: true }
     );
   } catch (err) {
-    if (err) console.log(error(err));
+    if (err) log(err);
     await browser.close();
-    console.log(error('Browser Closed'));
+    log('Browser Closed');
     return null;
   }
 }
@@ -155,8 +183,9 @@ async function getTheHinduNews() {
   });
   try {
     const page = await browser.newPage();
+    await page.setDefaultNavigationTimeout(60000);
 
-    console.log(success('The Hindu Fetch Started!'));
+    log('The Hindu Fetch Started!');
     await page.goto(`https://www.thehindu.com/opinion/`);
     await page.waitForSelector('div.ES2-100x4-text1');
     let theHinduNews = [];
@@ -206,8 +235,9 @@ async function getTheHinduNews() {
     const promises = theHinduNews.map(async (item) => {
       try {
         const page2 = await browser.newPage();
+        await page2.setDefaultNavigationTimeout(60000);
         await page2.goto(item.link);
-        console.log(success('Fetching', item.link));
+        log(`Fetching ${item.link}`);
         await page2.waitForSelector('.intro');
         const { author, content } = await page2.evaluate(() => {
           return {
@@ -223,13 +253,13 @@ async function getTheHinduNews() {
           content,
         };
       } catch (err) {
-        console.log(err);
+        log(err);
         return { ...item, content: '', author: '' };
       }
     });
 
     theHinduNews = await Promise.all(promises);
-    console.log(success('The Hindu Fetch Complete!'));
+    log('The Hindu Fetch Complete!');
     return dbRef.set(
       {
         theHinduNews,
@@ -237,9 +267,9 @@ async function getTheHinduNews() {
       { merge: true }
     );
   } catch (err) {
-    if (err) console.log(error(err));
+    if (err) log(err);
     await browser.close();
-    console.log(error('Browser Closed'));
+    log('Browser Closed');
     return null;
   }
 }
@@ -250,8 +280,9 @@ async function getIndiannExpressNews() {
   });
   try {
     const page = await browser.newPage();
+    await page.setDefaultNavigationTimeout(60000);
 
-    console.log(success('Indian Express Fetch Started!'));
+    log('Indian Express Fetch Started!');
     await page.goto(`https://indianexpress.com/section/opinion/`);
     await page.waitForSelector('.leadstory');
     let news = [];
@@ -298,8 +329,9 @@ async function getIndiannExpressNews() {
     const promises = news.map(async (item) => {
       try {
         const page2 = await browser.newPage();
+        await page2.setDefaultNavigationTimeout(60000);
         await page2.goto(item.link);
-        console.log(success('Fetching', item.link));
+        log(`Fetching ${item.link}`);
         await page2.waitForSelector('.full-details');
         const { author, content } = await page2.evaluate(() => {
           const itemContent = [];
@@ -317,13 +349,13 @@ async function getIndiannExpressNews() {
           content,
         };
       } catch (err) {
-        console.log(err);
+        log(err);
         return { ...item, content: '', author: '' };
       }
     });
 
     news = await Promise.all(promises);
-    console.log(success('Indian Express Fetch Complete!'));
+    log('Indian Express Fetch Complete!');
     return dbRef.set(
       {
         indexExpressNews: news,
@@ -331,9 +363,9 @@ async function getIndiannExpressNews() {
       { merge: true }
     );
   } catch (err) {
-    if (err) console.log(error(err));
+    if (err) log(err);
     await browser.close();
-    console.log(error('Browser Closed'));
+    log('Browser Closed');
     return null;
   }
 }
@@ -344,8 +376,9 @@ async function getMaharashtratimesNews() {
   });
   try {
     const page = await browser.newPage();
+    await page.setDefaultNavigationTimeout(60000);
 
-    console.log(success('Maharashtra times Fetch Started!'));
+    log('Maharashtra times Fetch Started!');
     await page.goto(
       `https://maharashtratimes.com/edit/editorial/articlelist/2429054.cms`
     );
@@ -379,8 +412,9 @@ async function getMaharashtratimesNews() {
     const promises = news.map(async (item) => {
       try {
         const page2 = await browser.newPage();
+        await page2.setDefaultNavigationTimeout(60000);
         await page2.goto(item.link);
-        console.log(success('Fetching', item.link));
+        log(`Fetching ${item.link}`);
         await page2.waitForSelector('.story-content');
         const { author, content } = await page2.evaluate(() => {
           return {
@@ -394,13 +428,14 @@ async function getMaharashtratimesNews() {
           content,
         };
       } catch (err) {
-        console.log(err);
+        log(err);
         return { ...item, content: '', author: '' };
       }
     });
 
     news = await Promise.all(promises);
-    console.log(success('Maharashtra times Fetch Complete!'));
+    log('Maharashtra times Fetch Complete!');
+
     return dbRef.set(
       {
         maharashtratimesNews: news,
@@ -408,9 +443,9 @@ async function getMaharashtratimesNews() {
       { merge: true }
     );
   } catch (err) {
-    if (err) console.log(error(err));
+    if (err) log(err);
     await browser.close();
-    console.log(error('Browser Closed'));
+    log('Browser Closed');
     return null;
   }
 }
@@ -422,6 +457,15 @@ async function getMaharashtratimesNews() {
   await getTheHinduNews();
   await getIndiannExpressNews();
   await getMaharashtratimesNews();
-  console.timeEnd('startScrape');
-  process.exit();
+  logger.end(async () => {
+    await gmailTransport.sendMail({
+      from: EMAIL_USERNAME,
+      subject: 'News Scrape Status',
+      html: '<h1>Report is attached.</h1>',
+      to: 'mail@ajaymore.in',
+      attachments: [{ path: path.resolve(__dirname, 'log.txt') }],
+    });
+    console.timeEnd('startScrape');
+    process.exit();
+  });
 })();
