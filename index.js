@@ -46,10 +46,12 @@ const today = format(new Date(), 'dd-MM-yyyy');
 
 const dbRef = admin.firestore().collection('news-feed').doc(today);
 
-const log = (message) =>
+const log = (message) => {
+  console.log(message);
   logger.write(
     `${format(new Date(), 'dd-MM-yyyy hh:mm:ss aa')} : ${message} \n`
   );
+};
 
 async function getHackerNews(browser) {
   try {
