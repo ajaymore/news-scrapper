@@ -134,7 +134,7 @@ async function getLoksattaNews(browser) {
     const promises = loksattaNews.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(60000);
+        await page2.setDefaultNavigationTimeout(12000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
         // await page2.waitForSelector('.txtsection');
@@ -226,7 +226,7 @@ async function getTheHinduNews(browser) {
     const promises = theHinduNews.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(60000);
+        await page2.setDefaultNavigationTimeout(12000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
         // await page2.waitForSelector('.intro');
@@ -315,7 +315,7 @@ async function getIndiannExpressNews(browser) {
     const promises = news.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(60000);
+        await page2.setDefaultNavigationTimeout(12000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
         // await page2.waitForSelector('.full-details');
@@ -393,7 +393,7 @@ async function getMaharashtratimesNews(browser) {
     const promises = news.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(60000);
+        await page2.setDefaultNavigationTimeout(12000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
         // await page2.waitForSelector('.story-content');
