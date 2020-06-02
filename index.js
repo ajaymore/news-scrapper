@@ -9,7 +9,9 @@ const serviceAccount = require('./serviceAccount.json');
 const token = require('./token.json');
 const credentials = require('./credentials.json');
 
-fs.unlinkSync(path.resolve(__dirname, 'log.txt'));
+if (fs.existsSync(path.resolve(__dirname, 'log.txt'))) {
+  fs.unlinkSync(path.resolve(__dirname, 'log.txt'));
+}
 const logger = fs.createWriteStream('log.txt', {
   flags: 'a', // 'a' means appending (old data will be preserved)
 });
@@ -49,10 +51,7 @@ const log = (message) =>
     `${format(new Date(), 'dd-MM-yyyy hh:mm:ss aa')} : ${message} \n`
   );
 
-async function getHackerNews() {
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+async function getHackerNews(browser) {
   try {
     const page = await browser.newPage();
     await page.setDefaultNavigationTimeout(60000);
@@ -89,16 +88,11 @@ async function getHackerNews() {
     );
   } catch (err) {
     if (err) log(err);
-    await browser.close();
-    log('Browser Closed');
     return null;
   }
 }
 
-async function getLoksattaNews() {
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+async function getLoksattaNews(browser) {
   try {
     const page = await browser.newPage();
     await page.setDefaultNavigationTimeout(60000);
@@ -171,16 +165,11 @@ async function getLoksattaNews() {
     );
   } catch (err) {
     if (err) log(err);
-    await browser.close();
-    log('Browser Closed');
     return null;
   }
 }
 
-async function getTheHinduNews() {
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+async function getTheHinduNews(browser) {
   try {
     const page = await browser.newPage();
     await page.setDefaultNavigationTimeout(60000);
@@ -268,16 +257,11 @@ async function getTheHinduNews() {
     );
   } catch (err) {
     if (err) log(err);
-    await browser.close();
-    log('Browser Closed');
     return null;
   }
 }
 
-async function getIndiannExpressNews() {
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+async function getIndiannExpressNews(browser) {
   try {
     const page = await browser.newPage();
     await page.setDefaultNavigationTimeout(60000);
@@ -358,22 +342,17 @@ async function getIndiannExpressNews() {
     log('Indian Express Fetch Complete!');
     return dbRef.set(
       {
-        indexExpressNews: news,
+        indianExpressNews: news,
       },
       { merge: true }
     );
   } catch (err) {
     if (err) log(err);
-    await browser.close();
-    log('Browser Closed');
     return null;
   }
 }
 
-async function getMaharashtratimesNews() {
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+async function getMaharashtratimesNews(browser) {
   try {
     const page = await browser.newPage();
     await page.setDefaultNavigationTimeout(60000);
@@ -444,19 +423,22 @@ async function getMaharashtratimesNews() {
     );
   } catch (err) {
     if (err) log(err);
-    await browser.close();
-    log('Browser Closed');
     return null;
   }
 }
 
 (async () => {
   console.time('startScrape');
-  await getHackerNews();
-  await getLoksattaNews();
-  await getTheHinduNews();
-  await getIndiannExpressNews();
-  await getMaharashtratimesNews();
+  const browser = await puppeteer.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+  await getHackerNews(browser);
+  await getLoksattaNews(browser);
+  await getTheHinduNews(browser);
+  await getIndiannExpressNews(browser);
+  await getMaharashtratimesNews(browser);
+  await browser.close();
+  log('Browser closed');
   logger.end(async () => {
     await gmailTransport.sendMail({
       from: EMAIL_USERNAME,
