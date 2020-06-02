@@ -56,11 +56,11 @@ const log = (message) => {
 async function getHackerNews(browser) {
   try {
     const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(60000);
+    await page.setDefaultNavigationTimeout(120000);
 
     log('HackerNews Fetch Started!');
     await page.goto(`https://news.ycombinator.com/`);
-    // await page.waitForSelector('tr.athing');
+    await page.waitForSelector('tr.athing');
     const hackerNews = await page.evaluate(() => {
       const nodes = document.querySelectorAll('tr.athing');
       const titleLinkArray = [];
@@ -97,11 +97,11 @@ async function getHackerNews(browser) {
 async function getLoksattaNews(browser) {
   try {
     const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(60000);
+    await page.setDefaultNavigationTimeout(120000);
 
     log('Loksatta Fetch Started!');
     await page.goto(`https://www.loksatta.com/sampadkiya/`);
-    // await page.waitForSelector('div.topnews.topn2');
+    await page.waitForSelector('div.topnews.topn2');
     let loksattaNews = await page.evaluate(() => {
       let news = [];
       const node = document.querySelector('div.topnews.topn2');
@@ -174,11 +174,11 @@ async function getLoksattaNews(browser) {
 async function getTheHinduNews(browser) {
   try {
     const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(60000);
+    await page.setDefaultNavigationTimeout(120000);
 
     log('The Hindu Fetch Started!');
     await page.goto(`https://www.thehindu.com/opinion/`);
-    // await page.waitForSelector('div.ES2-100x4-text1');
+    await page.waitForSelector('div.ES2-100x4-text1');
     let theHinduNews = [];
     const editorials = await page.evaluate(() => {
       let news = [];
@@ -266,11 +266,11 @@ async function getTheHinduNews(browser) {
 async function getIndiannExpressNews(browser) {
   try {
     const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(60000);
+    await page.setDefaultNavigationTimeout(120000);
 
     log('Indian Express Fetch Started!');
     await page.goto(`https://indianexpress.com/section/opinion/`);
-    // await page.waitForSelector('.leadstory');
+    await page.waitForSelector('.leadstory');
     let news = [];
     const editorials = await page.evaluate(() => {
       let newsItems = [];
@@ -357,13 +357,13 @@ async function getIndiannExpressNews(browser) {
 async function getMaharashtratimesNews(browser) {
   try {
     const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(60000);
+    await page.setDefaultNavigationTimeout(120000);
 
     log('Maharashtra times Fetch Started!');
     await page.goto(
       `https://maharashtratimes.com/edit/editorial/articlelist/2429054.cms`
     );
-    // await page.waitForSelector('.news-card.lead.col.news');
+    await page.waitForSelector('.news-card.lead.col.news');
     let news = [];
     const editorials = await page.evaluate(() => {
       let newsItems = [];
