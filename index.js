@@ -134,10 +134,10 @@ async function getLoksattaNews(browser) {
     const promises = loksattaNews.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(12000);
+        await page2.setDefaultNavigationTimeout(120000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        // await page2.waitForSelector('.txtsection');
+        await page2.waitForSelector('.txtsection');
         const { author, content } = await page2.evaluate(() => {
           return {
             content: document.querySelector('.txtsection').textContent || '',
@@ -226,10 +226,10 @@ async function getTheHinduNews(browser) {
     const promises = theHinduNews.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(12000);
+        await page2.setDefaultNavigationTimeout(120000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        // await page2.waitForSelector('.intro');
+        await page2.waitForSelector('.intro');
         const { author, content } = await page2.evaluate(() => {
           return {
             content:
@@ -315,10 +315,10 @@ async function getIndiannExpressNews(browser) {
     const promises = news.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(12000);
+        await page2.setDefaultNavigationTimeout(120000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        // await page2.waitForSelector('.full-details');
+        await page2.waitForSelector('.full-details');
         const { author, content } = await page2.evaluate(() => {
           const itemContent = [];
           document.querySelectorAll('.full-details p').forEach((node) => {
@@ -393,10 +393,10 @@ async function getMaharashtratimesNews(browser) {
     const promises = news.map(async (item) => {
       try {
         const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(12000);
+        await page2.setDefaultNavigationTimeout(120000);
         await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        // await page2.waitForSelector('.story-content');
+        await page2.waitForSelector('.story-content');
         const { author, content } = await page2.evaluate(() => {
           return {
             content: document.querySelector('.story-content').textContent,
