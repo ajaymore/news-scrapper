@@ -159,7 +159,7 @@ async function getLoksattaNews() {
   }
 }
 
-async function getTheHinduNews(browser) {
+async function getTheHinduNews() {
   try {
     log('The Hindu Fetch Started!');
     const res = await fetch(`https://www.thehindu.com/opinion/`);
@@ -233,7 +233,7 @@ async function getTheHinduNews(browser) {
   }
 }
 
-async function getIndiannExpressNews(browser) {
+async function getIndiannExpressNews() {
   try {
     log('Indian Express Fetch Started!');
     const res = await fetch(`https://indianexpress.com/section/opinion/`);
@@ -302,7 +302,7 @@ async function getIndiannExpressNews(browser) {
   }
 }
 
-async function getMaharashtratimesNews(browser) {
+async function getMaharashtratimesNews() {
   try {
     log('Maharashtra times Fetch Started!');
     const res = await fetch(
