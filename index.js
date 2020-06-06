@@ -1,5 +1,6 @@
 require('dotenv').config();
-const puppeteer = require('puppeteer');
+const fetch = require('isomorphic-fetch');
+const cheerio = require('cheerio');
 const admin = require('firebase-admin');
 const { format } = require('date-fns');
 const nodemailer = require('nodemailer');
@@ -53,103 +54,88 @@ const log = (message) => {
   );
 };
 
-async function getHackerNews(browser) {
+async function getHackerNews() {
   try {
-    const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(120000);
-
     log('HackerNews Fetch Started!');
-    await page.goto(`https://news.ycombinator.com/`);
-    await page.waitForSelector('tr.athing');
-    const hackerNews = await page.evaluate(() => {
-      const nodes = document.querySelectorAll('tr.athing');
-      const titleLinkArray = [];
-      nodes.forEach((node) => {
-        const link = node.querySelector('a.storylink').getAttribute('href');
-        titleLinkArray.push({
-          title: node.querySelector('a.storylink').innerText,
+    const res = await fetch('https://news.ycombinator.com/');
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const nodes = $('.athing');
+
+    const news = nodes
+      .map((i, el) => {
+        const link = $(el).find('a.storylink').attr('href');
+        return {
+          title: $(el).find('a.storylink').text(),
           link: link.includes('http')
             ? link
             : `https://news.ycombinator.com/${link}`,
-          age: node.nextElementSibling.querySelector('.age a')
-            ? node.nextElementSibling.querySelector('.age a').innerText
+          age: $(el).next().find('.age a')
+            ? $(el).next().find('.age a').text()
             : '',
-          score: node.nextElementSibling.querySelector('.score')
-            ? node.nextElementSibling.querySelector('.score').innerText
+          score: $(el).next().find('.score')
+            ? $(el).next().find('.score').text()
             : '',
-        });
-      });
-      return titleLinkArray;
-    });
-    log('HackerNews Fetch Complete!');
-    return dbRef.set(
-      {
-        hackerNews,
-      },
-      { merge: true }
-    );
+        };
+      })
+      .get();
+
+    return dbRef
+      .set(
+        {
+          hackerNews: news,
+        },
+        { merge: true }
+      )
+      .then(() => log('Hackernews Fetch successful!'));
   } catch (err) {
-    if (err) log(err);
+    if (err) log('HackerNews Fetch Error');
     return null;
   }
 }
 
-async function getLoksattaNews(browser) {
+async function getLoksattaNews() {
   try {
-    const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(120000);
-
     log('Loksatta Fetch Started!');
-    await page.goto(`https://www.loksatta.com/sampadkiya/`);
-    await page.waitForSelector('div.topnews.topn2');
-    let loksattaNews = await page.evaluate(() => {
-      let news = [];
-      const node = document.querySelector('div.topnews.topn2');
-      const banner = node.querySelector('img').getAttribute('src');
-      const title = node.querySelector('a').textContent;
-      const link = node.querySelector('a').getAttribute('href');
-      const excerpt = node.querySelector('p').textContent;
-      news = news.concat({
-        banner,
-        title,
-        link,
-        excerpt,
-      });
-      const newsItems = document.querySelectorAll('div.toprelative.topr2 li');
-      newsItems.forEach((linkNode) => {
-        const banner2 = linkNode.querySelector('img').getAttribute('src');
-        const title2 = linkNode.querySelector('a').textContent;
-        const link2 = linkNode.querySelector('a').getAttribute('href');
-        const excerpt2 = '';
-        news = news.concat({
-          banner: banner2,
-          title: title2,
-          link: link2,
-          excerpt: excerpt2,
-        });
-      });
-      return news;
-    });
+    const res = await fetch(`https://www.loksatta.com/sampadkiya/`);
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const node = $('div.topnews.topn2')[0];
+    const singleItem = {
+      banner: $(node).find('img').attr('src'),
+      title: $(node).find('a').text(),
+      link: $(node).find('a').attr('href'),
+      excerpt: $(node).find('p').text(),
+    };
 
-    const promises = loksattaNews.map(async (item) => {
+    const nodes = $('div.toprelative.topr2 li');
+    const items = nodes
+      .map((i, el) => {
+        const banner = $(el).find('img').attr('src');
+        const title = $(el).find('a').text();
+        const link = $(el).find('a').attr('href');
+        const excerpt = '';
+        return {
+          banner,
+          title,
+          link,
+          excerpt,
+        };
+      })
+      .get();
+
+    let news = [singleItem, ...items];
+
+    const promises = news.map(async (item) => {
       try {
-        const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(120000);
-        await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        await page2.waitForSelector('.txtsection');
-        const { author, content } = await page2.evaluate(() => {
-          return {
-            content: document.querySelector('.txtsection').textContent || '',
-            author:
-              document.querySelector('.dateholder').querySelector('a')
-                .textContent || '',
-          };
-        });
+        const res2 = await fetch(item.link);
+        const html2 = await res2.text();
+        const $2 = cheerio.load(html2);
         return {
           ...item,
-          author,
-          content,
+          author: $2('.dateholder').find('a').text() || '',
+          content: $2('.txtsection').text() || '',
         };
       } catch (err) {
         log(err);
@@ -157,91 +143,73 @@ async function getLoksattaNews(browser) {
       }
     });
 
-    loksattaNews = await Promise.all(promises);
-    log('Loksatta Fetch Complete!');
-    return dbRef.set(
-      {
-        loksattaNews,
-      },
-      { merge: true }
-    );
+    news = await Promise.all(promises);
+
+    return dbRef
+      .set(
+        {
+          loksattaNews: news,
+        },
+        { merge: true }
+      )
+      .then(() => log('Loksatta Fetch Complete!'));
   } catch (err) {
-    if (err) log(err);
+    if (err) log('Loksatta Fetch Error!');
     return null;
   }
 }
 
 async function getTheHinduNews(browser) {
   try {
-    const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(120000);
-
     log('The Hindu Fetch Started!');
-    await page.goto(`https://www.thehindu.com/opinion/`);
-    await page.waitForSelector('div.ES2-100x4-text1');
-    let theHinduNews = [];
-    const editorials = await page.evaluate(() => {
-      let news = [];
-      const newsItems = document.querySelectorAll('div.ES2-100x4-text1');
-      newsItems.forEach((linkNode) => {
+    const res = await fetch(`https://www.thehindu.com/opinion/`);
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    const items = $('div.ES2-100x4-text1')
+      .map((i, el) => {
         const banner = '';
-        const title = linkNode.querySelector('a').textContent;
-        const link = linkNode.querySelector('a').getAttribute('href');
-        const excerpt = linkNode.querySelector('.ES2-100x4-text1-content')
-          .textContent;
-        news = news.concat({
+        const title = $(el).find('a').text();
+        const link = $(el).find('a').attr('href');
+        const excerpt = $(el).find('.ES2-100x4-text1-content').text();
+        return {
           banner,
           title,
           link,
           excerpt,
-        });
-      });
+        };
+      })
+      .get();
 
-      const opinions = document
-        .getElementById('section_1')
-        .querySelectorAll('div.story-card-33');
-      opinions.forEach((linkNode) => {
-        const banner = linkNode.querySelector('img').getAttribute('src');
-        const title = linkNode.querySelector('.story-card-33-heading a')
-          .textContent;
-        const link = linkNode
-          .querySelector('.story-card-33-heading a')
-          .getAttribute('href');
-        const excerpt = linkNode.querySelector('.story-card-33-text')
-          .textContent;
-        const author = linkNode.querySelector('h3').nextElementSibling
-          .textContent;
-        news = news.concat({
+    const opinions = $('#section_1 div.story-card-33')
+      .map((i, el) => {
+        const banner = $(el).find('img').attr('src');
+        const title = $(el).find('.story-card-33-heading a').text();
+        const link = $(el).find('.story-card-33-heading a').attr('href');
+        const excerpt = $(el).find('.story-card-33-text').text();
+        const author = $(el).find('h3').next().text();
+        return {
           banner,
           title,
           link,
           excerpt,
           author,
-        });
-      });
-      return news;
-    });
-    theHinduNews = theHinduNews.concat(editorials);
+        };
+      })
+      .get();
 
-    const promises = theHinduNews.map(async (item) => {
+    let news = items.concat(opinions);
+
+    const promises = news.map(async (item) => {
       try {
-        const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(120000);
-        await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        await page2.waitForSelector('.intro');
-        const { author, content } = await page2.evaluate(() => {
-          return {
-            content:
-              document.querySelector('.intro').nextElementSibling.textContent ||
-              '',
-            author: '',
-          };
-        });
+        const res2 = await fetch(item.link);
+        const html2 = await res2.text();
+        const $2 = cheerio.load(html2);
         return {
           ...item,
-          author: item.author || author,
-          content,
+          content: $2('.intro').next().text() || '',
+          author: item.author || '',
         };
       } catch (err) {
         log(err);
@@ -249,90 +217,68 @@ async function getTheHinduNews(browser) {
       }
     });
 
-    theHinduNews = await Promise.all(promises);
-    log('The Hindu Fetch Complete!');
-    return dbRef.set(
-      {
-        theHinduNews,
-      },
-      { merge: true }
-    );
+    news = await Promise.all(promises);
+
+    return dbRef
+      .set(
+        {
+          theHinduNews: news,
+        },
+        { merge: true }
+      )
+      .then(() => log('The Hindu Fetch Complete!'));
   } catch (err) {
-    if (err) log(err);
+    if (err) log('The Hindu Fetch Error!');
     return null;
   }
 }
 
 async function getIndiannExpressNews(browser) {
   try {
-    const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(120000);
-
     log('Indian Express Fetch Started!');
-    await page.goto(`https://indianexpress.com/section/opinion/`);
-    await page.waitForSelector('.leadstory');
-    let news = [];
-    const editorials = await page.evaluate(() => {
-      let newsItems = [];
+    const res = await fetch(`https://indianexpress.com/section/opinion/`);
+    const html = await res.text();
+    const $ = cheerio.load(html);
 
-      const getSingle = () => {
-        const node = document.querySelector('.leadstory');
-        const banner = node.querySelector('img').getAttribute('src');
-        const title = node.querySelector('h2').textContent;
-        const link = node.querySelector('a').getAttribute('href');
-        const excerpt = '';
-        newsItems = newsItems.concat({
-          banner,
-          title,
-          link,
-          excerpt,
-        });
-      };
-      getSingle();
+    const node = $('.leadstory')[0];
+    const singleItem = {
+      banner: $(node).find('img').attr('src'),
+      title: $(node).find('h2').text(),
+      link: $(node).find('a').attr('href'),
+      excerpt: '',
+    };
 
-      const opinions = document.querySelectorAll('.opi-story');
-      opinions.forEach((linkNode, index) => {
-        if (index > 3) {
-          return;
-        }
-        const banner = linkNode.querySelector('img').getAttribute('src');
-        const title = linkNode.querySelector('h2').textContent;
-        const link = linkNode.querySelector('a').getAttribute('href');
+    const nodes = $('.opi-story');
+    const items = nodes
+      .map((i, el) => {
+        const banner = $(el).find('img').attr('src');
+        const title = $(el).find('h2').text();
+        const link = $(el).find('a').attr('href');
         const excerpt = '';
-        const author = linkNode.querySelector('.title').textContent;
-        newsItems = newsItems.concat({
+        const author = $(el).find('.title').text();
+        return {
           banner,
           title,
           link,
           excerpt,
           author,
-        });
-      });
-      return newsItems;
-    });
-    news = news.concat(editorials);
+        };
+      })
+      .get()
+      .filter((item, i) => i < 4);
+
+    let news = [singleItem, ...items];
 
     const promises = news.map(async (item) => {
       try {
-        const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(120000);
-        await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        await page2.waitForSelector('.full-details');
-        const { author, content } = await page2.evaluate(() => {
-          const itemContent = [];
-          document.querySelectorAll('.full-details p').forEach((node) => {
-            itemContent.push(node.textContent);
-          });
-          return {
-            content: itemContent.join('\n'),
-            author: '',
-          };
-        });
+        const res2 = await fetch(item.link);
+        const html2 = await res2.text();
+        const $2 = cheerio.load(html2);
         return {
           ...item,
-          author: item.author || author,
-          content,
+          content: $2('.full-details p').text() || '',
+          author: item.author || '',
         };
       } catch (err) {
         log(err);
@@ -341,72 +287,59 @@ async function getIndiannExpressNews(browser) {
     });
 
     news = await Promise.all(promises);
-    log('Indian Express Fetch Complete!');
-    return dbRef.set(
-      {
-        indianExpressNews: news,
-      },
-      { merge: true }
-    );
+
+    return dbRef
+      .set(
+        {
+          indianExpressNews: news,
+        },
+        { merge: true }
+      )
+      .then(() => log('Indian Express Fetch Complete!'));
   } catch (err) {
-    if (err) log(err);
+    if (err) log('Indian Express Fetch Error!');
     return null;
   }
 }
 
 async function getMaharashtratimesNews(browser) {
   try {
-    const page = await browser.newPage();
-    await page.setDefaultNavigationTimeout(120000);
-
     log('Maharashtra times Fetch Started!');
-    await page.goto(
+    const res = await fetch(
       `https://maharashtratimes.com/edit/editorial/articlelist/2429054.cms`
     );
-    await page.waitForSelector('.news-card.lead.col.news');
+    const html = await res.text();
+    const $ = cheerio.load(html);
+    const nodes = $('.news-card.lead.col.news');
     let news = [];
-    const editorials = await page.evaluate(() => {
-      let newsItems = [];
-
-      const opinions = document.querySelectorAll('.news-card.lead.col.news');
-      opinions.forEach((linkNode) => {
-        if (newsItems.length > 4 || linkNode.classList.contains('con_ads')) {
-          return;
-        }
-        const banner = linkNode.querySelector('img').getAttribute('src');
-        const title = linkNode.querySelector('.con_wrap').textContent;
-        const link = linkNode.querySelector('a').getAttribute('href');
-        const excerpt = '';
-        const author = '';
-        newsItems = newsItems.concat({
-          banner,
-          title,
-          link,
-          excerpt,
-          author,
-        });
+    nodes.each((i, el) => {
+      if (news.length > 4 || $(el).hasClass('con_ads')) {
+        return;
+      }
+      const banner = $(el).find('img').attr('src');
+      const title = $(el).find('.con_wrap').text();
+      const link = $(el).find('a').attr('href');
+      const excerpt = '';
+      const author = '';
+      news.push({
+        banner,
+        title,
+        link,
+        excerpt,
+        author,
       });
-      return newsItems;
     });
-    news = news.concat(editorials);
 
     const promises = news.map(async (item) => {
       try {
-        const page2 = await browser.newPage();
-        await page2.setDefaultNavigationTimeout(120000);
-        await page2.goto(item.link);
         log(`Fetching ${item.link}`);
-        await page2.waitForSelector('.story-content');
-        const { author, content } = await page2.evaluate(() => {
-          return {
-            content: document.querySelector('.story-content').textContent,
-            author: '',
-          };
-        });
+        const res2 = await fetch(item.link);
+        const html2 = await res2.text();
+        const $2 = cheerio.load(html2);
         return {
           ...item,
-          author: item.author || author,
-          content,
+          content: $2('.story-content').text() || '',
+          author: item.author || '',
         };
       } catch (err) {
         log(err);
@@ -415,32 +348,28 @@ async function getMaharashtratimesNews(browser) {
     });
 
     news = await Promise.all(promises);
-    log('Maharashtra times Fetch Complete!');
 
-    return dbRef.set(
-      {
-        maharashtratimesNews: news,
-      },
-      { merge: true }
-    );
+    return dbRef
+      .set(
+        {
+          maharashtratimesNews: news,
+        },
+        { merge: true }
+      )
+      .then(() => log('Maharashtra times Fetch Complete!'));
   } catch (err) {
-    if (err) log(err);
+    if (err) log('Maharashtra times Fetch Error!');
     return null;
   }
 }
 
 (async () => {
   console.time('startScrape');
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
-  await getHackerNews(browser);
-  await getLoksattaNews(browser);
-  await getTheHinduNews(browser);
-  await getIndiannExpressNews(browser);
-  await getMaharashtratimesNews(browser);
-  await browser.close();
-  log('Browser closed');
+  await getHackerNews();
+  await getLoksattaNews();
+  await getTheHinduNews();
+  await getIndiannExpressNews();
+  await getMaharashtratimesNews();
   logger.end(async () => {
     await gmailTransport.sendMail({
       from: EMAIL_USERNAME,
